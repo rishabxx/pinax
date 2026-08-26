@@ -19,18 +19,20 @@ progress that survives closing the terminal.
 > reader, no AI yet. See [Roadmap](#roadmap) below for what's next.
 
 <p align="center">
+  <img src="docs/screenshots/reader-image.png" alt="Pinax reader rendering an embedded chart via the Kitty graphics protocol, alongside code blocks, the outline sidebar, and the AI panel" width="100%">
+</p>
+<p align="center">
   <img src="docs/screenshots/reader.svg" alt="Pinax reader — sidebar with outline/pages tabs, a syntax-highlighted code block, colored status badges, and the AI panel" width="100%">
 </p>
 <p align="center">
   <img src="docs/screenshots/library.svg" alt="Pinax library screen showing recently read documents with progress bars" width="100%">
 </p>
 
-*(Screenshots above use the built-in Jet Black theme (one of 7) on a synthetic demo
-document — see `docs/screenshots/` for how they're generated, entirely original content, no
-real book. Real PDFs/EPUBs/DOCX/TXT render the same way. Embedded images render through your
-terminal's own graphics protocol — Kitty/Sixel, with a colored half-cell fallback everywhere
-else — which these headless captures can't demonstrate; open
-`docs/screenshots/demo-content/embedding-notes.pdf` yourself to see it.)*
+*(Screenshots use the built-in Jet Black theme (one of 7) on synthetic demo content — see
+`docs/screenshots/` for how it's generated, entirely original, no real book. Real
+PDFs/EPUBs/DOCX/TXT render the same way. The top image is a real terminal capture showing an
+embedded chart rendered live through the Kitty graphics protocol; the other two are headless
+captures, which can't exercise a real terminal's graphics protocol.)*
 
 ---
 
