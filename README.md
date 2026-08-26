@@ -18,6 +18,17 @@ progress that survives closing the terminal.
 > **Status: early, actively developed.** This is Phase 1 of a longer roadmap — an excellent
 > reader, no AI yet. See [Roadmap](#roadmap) below for what's next.
 
+<p align="center">
+  <img src="docs/screenshots/reader.svg" alt="Pinax reader — sidebar with outline/pages tabs, a syntax-highlighted code block, colored status badges, and the AI panel" width="100%">
+</p>
+<p align="center">
+  <img src="docs/screenshots/library.svg" alt="Pinax library screen showing recently read documents with progress bars" width="100%">
+</p>
+
+*(Screenshots above are of a synthetic demo document — see `docs/screenshots/` for how
+they're generated. Real PDFs/EPUBs render the same way; images additionally render through
+your terminal's graphics protocol, not shown here since these are headless captures.)*
+
 ---
 
 ## Why

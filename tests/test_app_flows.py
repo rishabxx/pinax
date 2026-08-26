@@ -287,3 +287,37 @@ async def test_library_shows_recently_opened_document(isolated_home, md_file):
         assert len(app.screen._records) == 1
         assert app.screen._records[0].path == str(md_file)
     app.conn.close()
+
+
+async def test_library_lists_all_documents_with_sized_rows(isolated_home, tmp_path):
+    # Regression: library rows had no explicit height, so the first entry expanded to
+    # fill the whole screen and every document after it rendered entirely off-screen.
+    from textual.widgets import ListView
+
+    paths = []
+    for i in range(3):
+        path = tmp_path / f"doc{i}.md"
+        path.write_text(f"# Document {i}\n\nSome content for document {i}.\n")
+        paths.append(str(path))
+
+    app = PinaxApp()
+    async with app.run_test(size=(140, 42)) as pilot:
+        await pilot.pause(0.2)
+        for path in paths:
+            app.open_document_path(path)
+            await pilot.pause(0.2)
+            await pilot.press("escape")
+            await pilot.pause(0.2)
+
+        assert isinstance(app.screen, LibraryScreen)
+        assert len(app.screen._records) == 3
+
+        list_view = app.screen.query_one("#library-list", ListView)
+        assert len(list_view.children) == 3
+        regions = [c.region for c in list_view.children]
+        # Every row must have a real, bounded height (not 0, not filling the screen) and
+        # rows must not overlap — each one stacked below the previous.
+        assert all(0 < r.height < 10 for r in regions)
+        assert regions[1].y > regions[0].y
+        assert regions[2].y > regions[1].y
+    app.conn.close()

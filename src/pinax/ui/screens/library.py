@@ -81,14 +81,23 @@ class LibraryScreen(Screen):
             progress = progress_repo.get(self.conn, record.id)
             percent = progress.progress if progress else 0.0
             last_read = _format_last_opened(record.last_opened_at)
+            detail_row = Horizontal(
+                ReadingProgressBar(percent, self.theme),
+                Static(Text(f"  Last read {last_read}", style=self.theme.muted)),
+            )
+            detail_row.styles.height = "auto"
             row = Vertical(
                 Static(Text(record.title, style=f"bold {self.theme.foreground}")),
-                Horizontal(
-                    ReadingProgressBar(percent, self.theme),
-                    Static(Text(f"  Last read {last_read}", style=self.theme.muted)),
-                ),
+                detail_row,
             )
-            list_view.append(ListItem(row))
+            # Without an explicit height, this row (and its ListItem) default to filling
+            # the ListView's available space instead of sizing to its two lines of
+            # content — the first entry would eat the whole screen and everything after
+            # it would render entirely off-screen.
+            row.styles.height = "auto"
+            item = ListItem(row)
+            item.styles.height = "auto"
+            list_view.append(item)
 
     def action_open_selected(self) -> None:
         list_view = self.query_one("#library-list", ListView)
