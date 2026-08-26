@@ -25,9 +25,12 @@ progress that survives closing the terminal.
   <img src="docs/screenshots/library.svg" alt="Pinax library screen showing recently read documents with progress bars" width="100%">
 </p>
 
-*(Screenshots above are of a synthetic demo document — see `docs/screenshots/` for how
-they're generated. Real PDFs/EPUBs render the same way; images additionally render through
-your terminal's graphics protocol, not shown here since these are headless captures.)*
+*(Screenshots above use the built-in Jet Black theme (one of 7) on a synthetic demo
+document — see `docs/screenshots/` for how they're generated, entirely original content, no
+real book. Real PDFs/EPUBs/DOCX/TXT render the same way. Embedded images render through your
+terminal's own graphics protocol — Kitty/Sixel, with a colored half-cell fallback everywhere
+else — which these headless captures can't demonstrate; open
+`docs/screenshots/demo-content/embedding-notes.pdf` yourself to see it.)*
 
 ---
 
