@@ -21,6 +21,8 @@ from ...app.state import ReaderViewMode, ReadingContext
 from ...config.models import Settings
 from ...config.settings import save_settings
 from ...documents.models import Document
+from ...intelligence import ProviderError, build_context, get_provider, parse_citations
+from ...persistence.repositories import ai_messages as ai_messages_repo
 from ...persistence.repositories import reading_progress as progress_repo
 from ...search.lexical import search as run_search
 from ..themes import THEMES, get_theme
@@ -66,6 +68,9 @@ class ReaderScreen(Screen):
         self._search_index = -1
         self._initial_page = initial_page
         self._initial_search = initial_search
+        self._ai_history: list[tuple[str, str]] = []
+        self._ai_worker = None
+        self._last_context_tiers = None
 
     def compose(self):
         yield TopBar(self.theme, id="top-bar")
@@ -81,6 +86,8 @@ class ReaderScreen(Screen):
             self.query_one("#toc-panel", Sidebar).display = False
         if not self.settings.reader.show_agent:
             self.query_one("#ai-panel", AIPanel).display = False
+        online = self.settings.ai.enabled and bool(self.settings.ai.model)
+        self.query_one("#ai-panel", AIPanel).set_online(online)
         await self._open_document()
 
     async def _open_document(self) -> None:
@@ -108,6 +115,10 @@ class ReaderScreen(Screen):
             current_section_id=progress.section_id if progress else None,
         )
         self._refresh_status_bar()
+
+        history = ai_messages_repo.list_for_document(self.conn, document.id)
+        self._ai_history = [(m.question, m.answer) for m in history]
+        self.query_one("#ai-panel", AIPanel).load_history(history)
 
         if self._initial_search:
             await self.action_open_search()
@@ -355,6 +366,7 @@ class ReaderScreen(Screen):
             Command("open-file", "Open another document", self.action_open_file_picker),
             Command("help", "Show keyboard shortcuts", self.action_open_help),
             Command("library", "Back to library", self.action_back_to_library),
+            Command("context", "Show last AI context breakdown", self.action_show_context),
         ]
         for key in THEMES:
             theme = THEMES[key]
@@ -412,12 +424,82 @@ class ReaderScreen(Screen):
         self._refresh_status_bar()
         self.notify(f"Theme: {self.theme.name}")
 
-    # -- AI panel (Phase 2 not implemented — see AIPanel) --------------------------
+    # -- AI panel -------------------------------------------------------------------
 
     def on_ai_panel_question_submitted(self, message: AIPanel.QuestionSubmitted) -> None:
-        self.notify(RESERVED_HINTS["reserved_ai"])
+        if not (self.settings.ai.enabled and self.settings.ai.model):
+            self.notify(RESERVED_HINTS["reserved_ai"])
+            return
+        self._ai_worker = self.run_worker(self._ask_ai(message.text), exclusive=True, group="ai")
 
-    # -- reserved (Phase 2/4) -----------------------------------------------------
+    def on_ai_panel_source_activated(self, message: AIPanel.SourceActivated) -> None:
+        reader = self.query_one("#reader-view", ReaderView)
+        citation = message.citation
+        if citation.block_id:
+            self.run_worker(reader.jump_to_block(citation.block_id))
+        elif citation.section_id:
+            self.run_worker(reader.jump_to_section(citation.section_id))
+
+    async def _ask_ai(self, question: str) -> None:
+        panel = self.query_one("#ai-panel", AIPanel)
+        if self.document is None or self.reading_context is None:
+            return
+        panel.start_turn(question)
+
+        try:
+            provider = get_provider(self.settings.ai)
+        except ProviderError as exc:
+            panel.show_error(str(exc))
+            return
+
+        ctx = build_context(
+            question=question,
+            document=self.document,
+            reading_context=self.reading_context,
+            conn=self.conn,
+            history=self._ai_history,
+            explanation_level=self.settings.ai.explanation_level,
+        )
+        self._last_context_tiers = ctx.tiers
+
+        answer = ""
+        try:
+            async for chunk in provider.chat(ctx.messages, model=self.settings.ai.model):
+                answer += chunk
+                panel.append_chunk(chunk)
+        except ProviderError as exc:
+            panel.show_error(str(exc))
+            return
+        except asyncio.CancelledError:
+            panel.cancelled()
+            raise
+
+        citations = parse_citations(answer, self.document)
+        panel.finish_turn(citations)
+        self._ai_history.append((question, answer))
+
+        ai_messages_repo.create(
+            self.conn,
+            document_id=self.document.id,
+            block_id=self.reading_context.cursor_block_id,
+            page=self.reading_context.current_page,
+            section_id=self.reading_context.current_section_id,
+            question=question,
+            answer=answer,
+            sources=[c.label for c in citations],
+            provider=self.settings.ai.provider,
+            model=self.settings.ai.model,
+        )
+
+    def action_show_context(self) -> None:
+        if not self._last_context_tiers:
+            self.notify("No AI context built yet — ask a question first.")
+            return
+        lines = [f"{t.name}: {'included' if t.included else 'skipped'} ({t.tokens} tok) {t.detail}".strip() for t in self._last_context_tiers]
+        total = sum(t.tokens for t in self._last_context_tiers if t.included)
+        self.notify("\n".join(lines) + f"\n\ntotal: {total} tok", title="AI context")
+
+    # -- reserved (Phase 4) ---------------------------------------------------------
 
     def action_reserved_ai(self) -> None:
         panel = self.query_one("#ai-panel", AIPanel)
@@ -435,7 +517,10 @@ class ReaderScreen(Screen):
     def action_close_overlay(self) -> None:
         from .library import LibraryScreen
 
-        if self.query("SearchBar"):
+        ai_panel = self.query_one("#ai-panel", AIPanel)
+        if ai_panel.streaming and self._ai_worker is not None:
+            self._ai_worker.cancel()
+        elif self.query("SearchBar"):
             self._close_search()
         elif self.query("CommandPalette"):
             self._close_palette()

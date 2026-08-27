@@ -41,6 +41,11 @@ def _to_toml(settings: Settings) -> str:
     for section_name, section in settings.model_dump().items():
         lines.append(f"[{section_name}]")
         for key, value in section.items():
+            # TOML has no null literal — omit the key entirely so the pydantic default
+            # (None) applies again on the next load, rather than round-tripping as the
+            # literal string "None".
+            if value is None:
+                continue
             lines.append(f"{key} = {_toml_value(value)}")
         lines.append("")
     return "\n".join(lines)

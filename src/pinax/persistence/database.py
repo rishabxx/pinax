@@ -78,6 +78,24 @@ _MIGRATIONS: list[str] = [
     CREATE INDEX idx_bookmarks_document ON bookmarks(document_id);
     CREATE INDEX idx_annotations_document ON annotations(document_id);
     """,
+    # 2: AI conversation history (Phase 2, brief §39/§41)
+    """
+    CREATE TABLE ai_messages (
+        id              TEXT PRIMARY KEY,
+        document_id     TEXT NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+        block_id        TEXT,
+        page            INTEGER,
+        section_id      TEXT,
+        question        TEXT NOT NULL,
+        answer          TEXT NOT NULL,
+        sources         TEXT NOT NULL DEFAULT '[]',
+        provider        TEXT,
+        model           TEXT,
+        created_at      TEXT NOT NULL
+    );
+
+    CREATE INDEX idx_ai_messages_document ON ai_messages(document_id, created_at);
+    """,
 ]
 
 

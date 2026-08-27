@@ -400,8 +400,8 @@ repository layer").
 - **Phase 1 (this delivery):** CLI, Textual shell, PDF/DOCX/MD/TXT/EPUB parsing, normalized
   model, reader view (reflow + source-page mode), TOC, vim scrolling, FTS5 search, SQLite
   progress persistence + library screen, 7 themes, width management, focus mode.
-- **Phase 2:** AI panel, provider abstraction (OpenAI/Anthropic/Ollama/compatible), streaming,
-  `ReadingContext`→`ContextBuilder` wiring, citations, chat persistence.
+- **Phase 2 (delivered):** AI panel, provider abstraction (OpenAI/Anthropic/Ollama/compatible),
+  streaming, `ReadingContext`→`ContextBuilder` wiring, citations, chat persistence. See §16.
 - **Phase 3:** hierarchical summaries, embeddings/hybrid retrieval, whole-document Q&A,
   `:context` debug view.
 - **Phase 4:** bookmarks/notes UI, selection mode, reading history (back/forward), AI-navigate,
@@ -417,7 +417,12 @@ repository layer").
   idempotency, progress upsert, bookmark CRUD, cascade deletes.
 - **TUI:** Textual's `App.run_test()` pilot for keybinding dispatch, TOC navigation, search
   overlay open/select/jump, theme switching, responsive layout breakpoints.
-- **No AI tests in Phase 1** — provider adapters and context-builder tests land with Phase 2.
+- **AI:** provider adapters mocked at the transport layer (`httpx.MockTransport` for Ollama's
+  NDJSON stream; OpenAI/Anthropic only tested for error-wrapping and factory dispatch, since
+  they're official SDKs), context-builder tier assembly against real parsed fixtures, citation
+  regex edge cases (numbered-list false positives, dedup, page+section resolution), and one
+  full TUI round-trip (`tests/test_ai_flow.py`) with a fake `LLMProvider` monkeypatched into
+  `ReaderScreen` — no network or API key required for any of it.
 
 ## 15. Post-Phase-1 visual pass
 
@@ -449,3 +454,46 @@ comparing against a target visual reference:
   default the way there was before it existed.
 
 None of this changes the layer boundaries in §1 — it is entirely inside `ui/`.
+
+## 16. Phase 2 — AI assistant (delivered)
+
+Implements §7's algorithm and wires it end-to-end. `ReaderScreen` remains the only thing
+that touches a provider or the context builder (§1's rule holds: widgets never call LLM
+providers directly) — `AIPanel` is a "dumb" widget driven entirely through public methods
+(`start_turn`/`append_chunk`/`finish_turn`/`show_error`/`cancelled`/`set_online`/
+`load_history`).
+
+- **`intelligence/providers/`**: an `LLMProvider` Protocol (`async chat(messages, *, model,
+  temperature, max_tokens) -> AsyncIterator[str]`) with four implementations — `openai.py` and
+  `anthropic.py` wrap the official SDKs, `ollama.py` speaks raw NDJSON over `httpx` (no SDK
+  dependency, since Ollama's HTTP API is trivial), `compatible.py` is a thin `OpenAIProvider`
+  subclass for any OpenAI-compatible endpoint. `get_provider(AIConfig)` is the one factory
+  entry point; API keys come only from environment variables
+  (`PINAX_OPENAI_API_KEY`/`OPENAI_API_KEY`, same pattern for Anthropic) — never from
+  `config.toml`.
+- **`intelligence/context_builder.py`**: `build_context()` assembles the tiered prompt from
+  §7 — selected text → visible blocks → nearby blocks → FTS5-retrieved chunks → conversation
+  history — each tier token-budgeted (`len(text)//4` heuristic) and reported back as a
+  `ContextTier` list so `:context` can render exactly what was sent.
+- **`intelligence/citations.py`**: parses `[p.N · §label]` / `[§label]` citations out of a
+  streamed answer, resolves each to a `block_id`/`section_id` for jump-navigation, dedupes,
+  and is deliberately strict enough to not false-positive on ordinary numbered-list brackets
+  like `[1]`.
+- **`ai_messages` table** (migration #2): one row per Q&A turn, scoped to `document_id`, with
+  `sources` stored as a JSON list of citation labels. `ReaderScreen._open_document()` replays
+  a document's past conversation into the panel on open (`AIPanel.load_history()`).
+- **Cancellation**: `Esc` while a response is streaming cancels the in-flight `run_worker`
+  (`group="ai"`, `exclusive=True`) instead of falling through to the other overlay-dismissal
+  branches in `action_close_overlay`.
+
+**Gotcha worth documenting**: Textual computes a message's default handler name from the
+*owning class's* `__qualname__` via a camel→snake pass that does **not** insert an underscore
+between a leading all-caps run and the following word — `AIPanel.QuestionSubmitted` snake-cases
+to `aipanel_question_submitted`, not `ai_panel_question_submitted`, silently orphaning the
+obviously-named handler on `ReaderScreen`. Every message nested in `AIPanel` is declared with
+an explicit `namespace="ai_panel"` class kwarg (`class QuestionSubmitted(Message,
+namespace="ai_panel")`) to force the handler name Textual's own naming convention would
+otherwise fail to produce. Caught by `tests/test_ai_flow.py`, which drives the flow through a
+real `Pilot` rather than calling the handler directly — a unit test that called
+`on_ai_panel_question_submitted()` by hand would have passed while the real message never
+reached it.

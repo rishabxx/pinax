@@ -26,6 +26,8 @@ class AIConfig(BaseModel):
     enabled: bool = False
     provider: Literal["openai", "anthropic", "ollama", "compatible"] = "ollama"
     model: str = ""
+    base_url: str | None = None  # required for "compatible"; overrides the default for "ollama"
+    explanation_level: Literal["beginner", "intermediate", "advanced", "expert"] = "intermediate"
 
 
 class RetrievalConfig(BaseModel):

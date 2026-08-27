@@ -15,8 +15,8 @@ instant full-text search, embedded images rendered via your terminal's graphics 
 (Kitty/Sixel, with a colored half-cell fallback everywhere else), themes, and reading
 progress that survives closing the terminal.
 
-> **Status: early, actively developed.** This is Phase 1 of a longer roadmap — an excellent
-> reader, no AI yet. See [Roadmap](#roadmap) below for what's next.
+> **Status: early, actively developed.** Phase 1 (reader) and Phase 2 (AI assistant) are
+> both in. See [Roadmap](#roadmap) below for what's next.
 
 <p align="center">
   <img src="docs/screenshots/reader-image.png" alt="Pinax reader rendering an embedded chart via the Kitty graphics protocol, alongside code blocks, the outline sidebar, and the AI panel" width="100%">
@@ -65,6 +65,11 @@ a context switch.
   no restart needed.
 - **Virtualized rendering** — a 2,000-page book costs about the same to open and scroll as a
   20-page one; only the blocks near your viewport are ever mounted.
+- **AI assistant, provider-agnostic**: ask questions about exactly what's on screen (`a`).
+  Works with OpenAI, Anthropic, Ollama, or any OpenAI-compatible endpoint — fully
+  local-capable, off by default. Answers cite `[p.N · §section]`, click a citation to jump
+  there. Conversations persist per document; `:context` shows exactly what was sent to the
+  model.
 
 ## Install
 
@@ -119,6 +124,24 @@ pinax cache status / clear     # inspect or clear the on-disk parse cache
 
 Full list inside the app with `?`.
 
+### AI setup
+
+The AI assistant is off by default — the reader is fully usable without it. To turn it on,
+edit the `[ai]` section of the config file (`pinax config`):
+
+```toml
+[ai]
+enabled = true
+provider = "ollama"   # "openai" | "anthropic" | "ollama" | "compatible"
+model = "llama3.1"
+```
+
+API keys are never stored in the config file — set an environment variable instead:
+`OPENAI_API_KEY` / `ANTHROPIC_API_KEY` (or the `PINAX_`-prefixed variants to keep them
+separate from other tools that read the same variable, e.g. `PINAX_OPENAI_API_KEY`). Ollama
+needs no key, just `ollama serve` running locally. `provider = "compatible"` targets any
+OpenAI-compatible endpoint via `base_url`.
+
 ## Architecture
 
 See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the full design: the normalized
@@ -135,9 +158,9 @@ Source Document → Parser → Normalized Document → Reader Engine → Reading
 Built as vertical slices, one working product at each stage — not everything at once.
 
 - [x] **Phase 1 — Reader.** Parsing, TUI, search, progress persistence, themes, images.
-      *(this release)*
-- [ ] **Phase 2 — AI assistant.** Context-aware Q&A about exactly what's on screen, provider-
+- [x] **Phase 2 — AI assistant.** Context-aware Q&A about exactly what's on screen, provider-
       agnostic (OpenAI/Anthropic/Ollama/any OpenAI-compatible endpoint), fully local-capable.
+      *(this release)*
 - [ ] **Phase 3 — Retrieval.** Semantic search, hierarchical summaries, whole-document Q&A
       with citations.
 - [ ] **Phase 4 — Power reader.** Bookmarks, notes/highlights, selection mode, reading
@@ -148,7 +171,7 @@ Built as vertical slices, one working product at each stage — not everything a
 ## Contributing
 
 Issues and PRs welcome — this is early and there's a lot of surface area. Before sending a
-PR: `uv run pytest` should pass (currently 55 tests, TUI interaction tests included via
+PR: `uv run pytest` should pass (currently 71 tests, TUI interaction tests included via
 Textual's `Pilot`).
 
 ## License
